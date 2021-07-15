@@ -1,8 +1,9 @@
 cmake_minimum_required(VERSION 3.13)
 
-project(rlbox-cpp17
+project(rlbox-sandboxing-api
         VERSION 0.1
-        DESCRIPTION "RLBox safe sandboxing API in C++17")
+        DESCRIPTION "RLBox safe sandboxing API in C++17"
+        HOMEPAGE_URL "https://github.com/PLSysSec/rlbox_sandboxing_api")
 
 set(CMAKE_MODULE_PATH "${PROJECT_SOURCE_DIR}/cmake" ${CMAKE_MODULE_PATH})
 
@@ -95,12 +96,21 @@ if(NOT Catch2_FOUND)
   list(APPEND CMAKE_MODULE_PATH "${catch2_SOURCE_DIR}/contrib")
 endif()
 
+file(GLOB_RECURSE
+     RLBOX_SOURCE_FILES
+     code/include/*.[chi]pp
+     code/include/*.[chi]xx
+     code/include/*.cc
+     code/include/*.hh
+     code/include/*.ii
+     code/include/*.[CHI])
+
 # Documentation ###################
+
 find_package(Doxygen QUIET)
 
 if(DOXYGEN_FOUND)
-  # Technique from https://devblogs.microsoft.com/cppblog/clear-functional-c
-  # -documentation-with-sphinx-breathe-doxygen-cmake/
+  # Technique from https://devblogs.microsoft.com/cppblog/clear-functional-c-documentation-with-sphinx-breathe-doxygen-cmake/
   set(DOXYGEN_PROJECT_NAME "RLBox")
   set(DOXYGEN_INPUT_DIR ${CMAKE_CURRENT_SOURCE_DIR}/code/include)
   set(DOXYGEN_OUTPUT_DIR ${CMAKE_CURRENT_SOURCE_DIR}/docs/doxygen)
@@ -110,15 +120,6 @@ if(DOXYGEN_FOUND)
 
   # Replace variables inside @@ with the current values
   configure_file(${DOXYFILE_IN} ${DOXYFILE_OUT} @ONLY)
-
-  file(GLOB_RECURSE
-       RLBOX_SOURCE_FILES
-       code/include/*.[chi]pp
-       code/include/*.[chi]xx
-       code/include/*.cc
-       code/include/*.hh
-       code/include/*.ii
-       code/include/*.[CHI])
 
   file(MAKE_DIRECTORY ${DOXYGEN_OUTPUT_DIR})
   add_custom_command(OUTPUT ${DOXYGEN_INDEX_FILE}
@@ -158,10 +159,42 @@ endif()
 
 # Targets ###################
 
+include(GNUInstallDirs)
+
 find_package(Threads REQUIRED)
-add_library(rlbox-cpp17-lib INTERFACE)
-target_include_directories(rlbox-cpp17-lib INTERFACE code/include)
-target_link_libraries(rlbox-cpp17-lib INTERFACE ${CMAKE_THREAD_LIBS_INIT})
+add_library(${PROJECT_NAME} INTERFACE)
+target_include_directories(${PROJECT_NAME} INTERFACE
+  $<BUILD_INTERFACE:${${PROJECT_NAME}_SOURCE_DIR}/code/include>
+  $<INSTALL_INTERFACE:${CMAKE_INSTALL_INCLUDEDIR}>)
+target_compile_features(${PROJECT_NAME} INTERFACE cxx_std_17)
+target_link_libraries(${PROJECT_NAME} INTERFACE ${CMAKE_THREAD_LIBS_INIT})
+set_target_properties(${PROJECT_NAME} PROPERTIES PUBLIC_HEADER "${RLBOX_SOURCE_FILES}")
+
+# Install ###################
+
+include(CMakePackageConfigHelpers)
+
+write_basic_package_version_file("${PROJECT_NAME}ConfigVersion.cmake"
+                                 VERSION ${CMAKE_PROJECT_VERSION}
+                                 COMPATIBILITY SameMajorVersion)
+
+set(DATAROOT_CONFIG_DESTINATION "${CMAKE_INSTALL_DATAROOTDIR}/cmake/${PROJECT_NAME}")
+configure_package_config_file(${PROJECT_SOURCE_DIR}/cmake/${PROJECT_NAME}Config.cmake.in
+  ${PROJECT_BINARY_DIR}/${PROJECT_NAME}Config.cmake
+  INSTALL_DESTINATION ${DATAROOT_CONFIG_DESTINATION}
+  PATH_VARS CMAKE_INSTALL_INCLUDEDIR)
+install(TARGETS ${PROJECT_NAME}
+        EXPORT ${PROJECT_NAME}-targets
+        PUBLIC_HEADER DESTINATION "${CMAKE_INSTALL_INCLUDEDIR}/rlbox"
+        ARCHIVE DESTINATION ${CMAKE_INSTALL_LIBDIR}
+        LIBRARY DESTINATION ${CMAKE_INSTALL_LIBDIR}
+        RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR})
+install(EXPORT ${PROJECT_NAME}-targets
+        FILE ${PROJECT_NAME}Targets.cmake
+        DESTINATION ${DATAROOT_CONFIG_DESTINATION})
+install(FILES "${PROJECT_BINARY_DIR}/${PROJECT_NAME}Config.cmake"
+              "${PROJECT_BINARY_DIR}/${PROJECT_NAME}ConfigVersion.cmake"
+        DESTINATION ${DATAROOT_CONFIG_DESTINATION})
 
 # Tests ###################
 
@@ -169,6 +202,7 @@ include(CTest)
 include(Catch)
 
 # Test rlbox features
+
 add_executable(test_rlbox
                code/tests/test_main.cpp
                code/tests/rlbox/test_app_pointers.cpp
@@ -193,7 +227,7 @@ add_executable(test_rlbox
 
 target_include_directories(test_rlbox PRIVATE code/tests/rlbox)
 
-target_link_libraries(test_rlbox Catch2::Catch2 rlbox-cpp17-lib)
+target_link_libraries(test_rlbox Catch2::Catch2 ${PROJECT_NAME})
 
 catch_discover_tests(test_rlbox)
 
@@ -205,7 +239,7 @@ add_executable(test_rlbox_transition_timers
 
 target_include_directories(test_rlbox_transition_timers PRIVATE code/tests/rlbox)
 
-target_link_libraries(test_rlbox_transition_timers Catch2::Catch2 rlbox-cpp17-lib)
+target_link_libraries(test_rlbox_transition_timers Catch2::Catch2 ${PROJECT_NAME})
 
 catch_discover_tests(test_rlbox_transition_timers)
 
@@ -217,11 +251,12 @@ add_executable(test_rlbox_transition_customization
 
 target_include_directories(test_rlbox_transition_customization PRIVATE code/tests/rlbox)
 
-target_link_libraries(test_rlbox_transition_customization Catch2::Catch2 rlbox-cpp17-lib)
+target_link_libraries(test_rlbox_transition_customization Catch2::Catch2 ${PROJECT_NAME})
 
 catch_discover_tests(test_rlbox_transition_customization)
 
 # Test rlbox glue
+
 add_library(rlbox_glue_lib_static STATIC code/tests/rlbox_glue/lib/libtest.c)
 target_include_directories(rlbox_glue_lib_static
                            PUBLIC code/tests/rlbox_glue/lib)
@@ -237,7 +272,7 @@ target_include_directories(test_rlbox_glue PUBLIC code/tests/rlbox_glue)
 
 target_link_libraries(test_rlbox_glue
                       Catch2::Catch2
-                      rlbox-cpp17-lib
+                      ${PROJECT_NAME}
                       rlbox_glue_lib_static)
 
 catch_discover_tests(test_rlbox_glue)
@@ -249,7 +284,7 @@ target_include_directories(test_rlbox_glue_embedder_vars PUBLIC code/tests/rlbox
 
 target_link_libraries(test_rlbox_glue_embedder_vars
                       Catch2::Catch2
-                      rlbox-cpp17-lib
+                      ${PROJECT_NAME}
                       rlbox_glue_lib_static)
 
 catch_discover_tests(test_rlbox_glue_embedder_vars)
@@ -263,15 +298,14 @@ target_compile_definitions(test_rlbox_glue_dylib PUBLIC GLUE_LIB_PATH="$<TARGET_
 
 target_link_libraries(test_rlbox_glue_dylib
                       Catch2::Catch2
-                      rlbox-cpp17-lib
+                      ${PROJECT_NAME}
                       ${CMAKE_DL_LIBS})
 
 add_dependencies(test_rlbox_glue_dylib rlbox_glue_lib_shared)
 
 catch_discover_tests(test_rlbox_glue_dylib)
 
-
-# Shortcuts ###################
+# make check
 
 add_custom_target(
   check
